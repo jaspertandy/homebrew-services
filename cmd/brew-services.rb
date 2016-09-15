@@ -193,7 +193,8 @@ module ServicesCli
       case cmd
       when "cleanup", "clean", "cl", "rm" then cleanup
       when "list", "ls" then list
-      when "restart", "relaunch", "reload", "r" then check(target) and restart(target)
+      when "restart", "relaunch", "r" then check(target) and restart(target)
+      when "reload" then check(target) and reload(target)
       when "start", "launch", "load", "s", "l" then check(target) and start(target, custom_plist)
       when "stop", "unload", "terminate", "term", "t", "u" then check(target) and stop(target)
       else
