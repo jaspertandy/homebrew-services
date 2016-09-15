@@ -273,6 +273,50 @@ module ServicesCli
       puts "All #{root? ? "root" : "user-space"} services OK, nothing cleaned..." if cleaned.empty?
     end
 
+    # reload a service
+    def reload(target)
+      Array(target).each do |service|
+        softstop(service) if service.loaded?
+        softstart(service)
+      end
+    end
+
+    # Stop a service without replacing pid files
+    def softstop(target)
+      if target.is_a?(Service) && !target.loaded?
+        if target.started?
+          odie "Service `#{target.name}` is started as `#{target.started_as}`. Try `#{"sudo " unless ServicesCli.root?}#{bin} stop #{target.name}`"
+        else
+          odie "Service `#{target.name}` is not started."
+        end
+      end
+
+      Array(target).select(&:loaded?).each do |service|
+        if service.dest.exist?
+          puts "Stopping `#{service.name}`... (might take a while)"
+          safe_system launchctl, "unload", "-w", service.dest.to_s
+          $?.to_i != 0 ? odie("Failed to stop `#{service.name}`") : ohai("Successfully stopped `#{service.name}` (label: #{service.label})")
+        else
+          puts "Stopping stale service `#{service.name}`... (might take a while)"
+          kill(service)
+        end
+      end
+    end
+
+    # Start a service without replacing pid files
+    def softstart(target)
+      if target.is_a?(Service)
+        if target.loaded?
+          puts "Service `#{target.name}` already started, use `#{bin} restart #{target.name}` to restart."
+          return
+        end
+      end
+
+      Array(target).each do |service|
+        safe_system launchctl, "load", "-w", service.dest.to_s
+        $?.to_i != 0 ? odie("Failed to start `#{service.name}`") : ohai("Successfully started `#{service.name}` (label: #{service.label})")
+      end
+    end
     # Stop if loaded, then start again.
     def restart(target)
       Array(target).each do |service|
@@ -469,7 +513,7 @@ class Service
     # Replace "template" variables and ensure label is always, always homebrew.mxcl.<formula>
     data = data.to_s.gsub(/\{\{([a-z][a-z0-9_]*)\}\}/i) { |_m| formula.send($1).to_s if formula.respond_to?($1) }.gsub(%r{(<key>Label</key>\s*<string>)[^<]*(</string>)}, '\1' + label + '\2')
 
-    # Always remove the "UserName" as it doesn't work since 10.11.5 
+    # Always remove the "UserName" as it doesn't work since 10.11.5
     if data =~ %r{<key>UserName</key>}
       data = data.gsub(%r{(<key>UserName</key>\s*<string>)[^<]*(</string>)}, "")
     end
